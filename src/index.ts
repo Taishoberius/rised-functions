@@ -24,6 +24,7 @@ export const createPreference = functions.https.onRequest((req, res) => {
         "weather" : req.body.weather,
         "workAddress" : req.body.workAddress,
         "address" : req.body.workAddress,
+        "token" : req.body.token,
     })
     .then(doc => res.send(doc.id))
     .catch(err => res.status(500).send(err));
@@ -57,6 +58,7 @@ export const updPreference = functions.https.onRequest((req, res) => {
         "weather" : req.body.weather,
         "workAddress" : req.body.workAddress,
         "address" : req.body.address,
+        "token" : req.body.token,
     }
 
     return collection.doc(id).update(doc)
