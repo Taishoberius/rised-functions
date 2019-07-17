@@ -1,5 +1,6 @@
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
+
 admin.initializeApp(functions.config().firebase);
 
 const collection = admin.firestore().collection('preferences');
@@ -24,7 +25,7 @@ export const createPreference = functions.https.onRequest((req, res) => {
         "weather" : req.body.weather,
         "workAddress" : req.body.workAddress,
         "address" : req.body.workAddress,
-        "token" : req.body.token,
+        "token" : req.body.token
     })
     .then(doc => res.send(doc.id))
     .catch(err => res.status(500).send(err));
@@ -37,7 +38,7 @@ export const getPreference = functions.https.onRequest((req, res) => {
     }
     return collection.doc(id).get()
     .then(snapshot => {
-        return res.send(snapshot.data());
+        return res.send(getDocument(snapshot, id));
     })
     .catch(err => res.status(500).send(err));
 });
@@ -48,7 +49,20 @@ export const updPreference = functions.https.onRequest((req, res) => {
         return res.status(300).send("Missing parameter id");
     }
 
-    const doc = {
+    const docUpd = {
+        "deviceName" : req.body.deviceName,
+        "humidity" : req.body.humidity,
+        "itinerary" : req.body.itinerary,
+        "name" : req.body.name,
+        "temperature" : req.body.temperature,
+        "transportType" : req.body.transportType,
+        "weather" : req.body.weather,
+        "workAddress" : req.body.workAddress,
+        "address" : req.body.address,
+        "token" : req.body.token
+    }
+
+    const docSend = {
         "deviceName" : req.body.deviceName,
         "humidity" : req.body.humidity,
         "itinerary" : req.body.itinerary,
@@ -59,10 +73,20 @@ export const updPreference = functions.https.onRequest((req, res) => {
         "workAddress" : req.body.workAddress,
         "address" : req.body.address,
         "token" : req.body.token,
+        "id": id
     }
 
-    return collection.doc(id).update(doc)
-    .then(() => res.send(doc))
+    return collection.doc(id).update(docUpd)
+    .then(() => {
+        if (docUpd.token != undefined && docUpd.token != "") {
+            sendUserNotification(docUpd.token, id, "user preference updated")
+            .then()
+            .catch()
+        }
+
+        return Promise.resolve
+    })
+    .then(() => res.send(docSend))
     .catch(err => res.status(500).send(err));
 });
 
@@ -70,41 +94,33 @@ export const updPreference = functions.https.onRequest((req, res) => {
 
 // });
 
-export const sendNotification = functions.https.onRequest((req, res) => {
-    const id = req.query.id;
+export const sendToothBrushNotification = functions.https.onRequest((req, res) => {
+    const id = req.query.id
     if (id == undefined) {
-        return res.status(300).send("Missing parameter id");
+        return res.status(400).send("Missing parameter id");
     }
+
     return collection.doc(id).get()
-        .then(snapshot => {
-            let data = snapshot.data();
-            if (data == undefined)
-                return res.status(400).send("ressource not found");
+        .then(doc => {
+            const data = doc.data();
+            if (data == undefined) return res.status(404).send("Document not found");
 
-            let token = data.token;
-            if (token == undefined || token == "") {
-                return res.status(400).send("no token");
-            }
-
-            const payload = {
-                data: {
-                    title: 'An event has occurred!',
-                    body: 'Please respond to this event.'
-                }
-            }
-
-            return admin.messaging().sendToDevice(token, payload)
-                .then(function(response) {
-                    console.log("Successfully sent message:", response);
-                    return res.status(200).send("Successfully sent notification");
-                })
-                .catch(function(error) {
-                    console.log("Error sending message:", error);
-                    return res.status(500).send("Failed to send notif");
-                });
-
+            return sendUserNotification(data.token, id, "toothbrush")
+            .then(() => res.send())
+            .catch(err => res.status(500).send(err))
         })
 });
+
+const sendUserNotification = (token: string, docId: string, message: string) => {
+    const payload = {
+        data: {
+            title: docId,
+            body: message
+        }
+    };
+
+    return admin.messaging().sendToDevice(token, payload)
+}
 
 const getDocuments = function(snap: FirebaseFirestore.QuerySnapshot) {
     const documents: any[] = [];
@@ -114,4 +130,12 @@ const getDocuments = function(snap: FirebaseFirestore.QuerySnapshot) {
         documents.push(document);
     });
     return documents;
+}
+
+const getDocument = (document: FirebaseFirestore.DocumentSnapshot, id: string) => {
+    let data = document.data();
+    if (data == undefined) return;
+    data.id = id;
+
+    return data;
 }
